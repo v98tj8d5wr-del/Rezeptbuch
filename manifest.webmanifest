@@ -1,0 +1,12 @@
+{
+  "name": "Mein Rezeptbuch",
+  "short_name": "Rezeptbuch",
+  "description": "Deine private Rezeptsammlung",
+  "lang": "de-DE",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f4ed",
+  "theme_color": "#f7f4ed",
+  "icons": []
+}
