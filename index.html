@@ -50,28 +50,31 @@ function parseText(raw){
   text=text.replace(/^\s*(URL Source|URL|Source URL|Markdown Content):.*$/gim,'')
            .replace(/!\[[^\]]*\]\([^)]*\)/g,'')
            .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g,'$1');
-  let lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
-  const clean=x=>x.replace(/^#{1,6}\s*/,'').replace(/^\*\*(.*?)\*\*$/,'$1').replace(/^[-*•]\s*/,'').trim();
-  const isNav=x=>/^(cuisines|chef recipes|explore more|health|family|quick and easy|budget|collections|subscribe|sign in|register|home|recipes|all recipes|more recipes|you may also like|related recipes|advertisement|jump to recipe|print recipe|save recipe|reviews|ratings|comments|share|search)$/i.test(clean(x));
-  lines=lines.filter(x=>!/^https?:\/\/\S+$/i.test(x)&&!isNav(x));
+  const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
+  const clean=x=>x.replace(/^#{1,6}\s*/,'').replace(/^\*\*(.*?)\*\*$/,'$1').replace(/^[-*•]\s*/,'').replace(/^\d+\.\s*/,'').trim();
+  const nav=/^(back to main menu|health hub|back to health|nutracheck|cuisines|chef recipes|explore more|health|family|quick and easy|budget|collections|subscribe|sign in|register|home|recipes|all recipes|more recipes|you may also like|related recipes|advertisement|jump to recipe|print recipe|save recipe|reviews|ratings|comments|share|search)$/i;
   const titleLine=lines.find(x=>/^title\s*:/i.test(x));
   let title=titleLine?titleLine.replace(/^title\s*:\s*/i,''):clean(lines.find(x=>/^#\s+/.test(x))||lines[0]||'');
   title=clean(title).slice(0,120);
-  const ingRe=/^(ingredients|zutaten|what you need|you will need|you'll need|for the sauce|for the filling|for the meat sauce|for the white sauce|du brauchst|für die zutaten)\s*:?\s*$/i;
-  const stepRe=/^(method|instructions|directions|zubereitung|anleitung|steps|how to|preparation|step-by-step)\s*:?\s*$/i;
-  let ingAt=lines.findIndex(x=>ingRe.test(clean(x)));
-  let stepAt=lines.findIndex(x=>stepRe.test(clean(x)));
-  if(ingAt<0) ingAt=lines.findIndex(x=>/^#{1,6}\s*(ingredients|zutaten)\b/i.test(x));
-  if(stepAt<0) stepAt=lines.findIndex(x=>/^#{1,6}\s*(method|instructions|directions|zubereitung|anleitung|step-by-step)\b/i.test(x));
+  const isHeading=(line,re)=>/^#{1,6}\s*/.test(line)&&re.test(clean(line));
+  let methodAt=-1;
+  for(let i=0;i<lines.length;i++) if(isHeading(lines[i],/^(method|instructions|directions|zubereitung|anleitung|step-by-step)$/i)) methodAt=i;
+  let ingredientsAt=-1, maxIng=methodAt>=0?methodAt:lines.length;
+  for(let i=0;i<maxIng;i++) if(isHeading(lines[i],/^(ingredients|zutaten)$/i)) ingredientsAt=i;
+  if(ingredientsAt<0) for(let i=0;i<maxIng;i++) if(/^(ingredients|zutaten)\s*:?\s*$/i.test(clean(lines[i]))) ingredientsAt=i;
+  if(methodAt<0) for(let i=0;i<lines.length;i++) if(/^(method|instructions|directions|zubereitung|anleitung)\s*:?\s*$/i.test(clean(lines[i]))) methodAt=i;
+  const isSectionHeading=line=>/^#{1,6}\s+/.test(line);
   let ingredients='',steps='';
-  if(ingAt>=0){
-    const end=stepAt>ingAt?stepAt:lines.length;
-    ingredients=lines.slice(ingAt+1,end).map(clean).filter(x=>!isNav(x)).join('\n');
+  if(ingredientsAt>=0){
+    let end=methodAt>ingredientsAt?methodAt:lines.length;
+    for(let i=ingredientsAt+1;i<end;i++){if(isSectionHeading(lines[i])&&i>ingredientsAt+1){end=i;break;}}
+    ingredients=lines.slice(ingredientsAt+1,end).map(clean).filter(x=>x&&!nav.test(x)&&!/^https?:\/\//i.test(x)).join('\n');
   }
-  if(stepAt>=0) steps=lines.slice(stepAt+1).map(clean).filter(x=>!isNav(x)).join('\n');
-  // If the reader output has no ingredient heading, do not put navigation or arbitrary page text into ingredients.
-  if(ingAt<0) ingredients='';
-  if(stepAt<0) steps='';
+  if(methodAt>=0){
+    let end=lines.length;
+    for(let i=methodAt+1;i<lines.length;i++){if(isSectionHeading(lines[i])&&i>methodAt+1&&!/^#{1,6}\s*(step\s+\d+|\d+)\b/i.test(lines[i])){end=i;break;}}
+    steps=lines.slice(methodAt+1,end).map(clean).filter(x=>x&&!nav.test(x)&&!/^https?:\/\//i.test(x)).join('\n');
+  }
   return {title,ingredients,steps};
 }
 $('parseBtn').onclick=()=>{const p=parseText($('raw').value);if(!p){toast('Bitte zuerst Rezepttext einfügen.');return}if(!$('title').value)$('title').value=p.title;if(!$('ingredients').value)$('ingredients').value=p.ingredients;if(!$('steps').value)$('steps').value=p.steps;if(!p.ingredients&&!p.steps){toast('Keine verlässlichen Zutaten oder Schritte erkannt. Bitte manuell ergänzen.');return}toast('Text übernommen – Zutaten und Zubereitung bitte prüfen.')};
